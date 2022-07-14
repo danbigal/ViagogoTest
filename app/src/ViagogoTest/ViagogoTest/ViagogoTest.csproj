@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net6.0</TargetFramework>
+    <RootNamespace>Viagogo</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Remove="DistanceKey.cs~RF74af37.TMP" />
+  </ItemGroup>
+
+</Project>
