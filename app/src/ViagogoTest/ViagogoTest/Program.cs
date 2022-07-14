@@ -10,13 +10,13 @@ namespace Viagogo
 {
     public class Program
     {
-        private static List<Event> events;
+        public static List<Event> Events { get; set; }
 
         private static ConcurrentDictionary<string, int> cacheDistances = new ConcurrentDictionary<string, int>();
 
         static void Main(string[] args)
         {
-            events = new List<Event>{
+            Events = new List<Event>{
                                     new Event { Name = "Phantom of the Opera", City = "New York" },
                                     new Event { Name = "Metallica", City = "Los Angeles" },
                                     new Event { Name = "Metallica", City = "New York" },
@@ -28,12 +28,7 @@ namespace Viagogo
                                     new Event { Name = "LadyGaGa", City = "Washington" }
                                 };
 
-            //for (int i = 0; i < 200; i++)
-            //{
-            //    events.Add(new Event() { Name = i.ToString(), City = "New York" });
-            //}
-
-            var customer = new Customer { Name = "John Smith", City = "New York" };
+            var customer = new Customer { Name = "Mr. Fake", City = "New York" };
 
             Console.WriteLine("***** TASK 1 ****");
             Task1(customer);
@@ -53,12 +48,12 @@ namespace Viagogo
             Console.ReadKey();
         }
 
-        private static void Task1(Customer customer)
+        public static IEnumerable<Event> Task1(Customer customer)
         {
             Stopwatch sw = new Stopwatch();
             sw.Start();
 
-            var customerEvents = events.Where(e => e.City == customer.City);
+            var customerEvents = Events.Where(e => e.City == customer.City);
 
             // Parallel may perform better here, as it's unordered and also has no limits of events
             Parallel.ForEach(customerEvents, e =>
@@ -68,36 +63,19 @@ namespace Viagogo
 
             sw.Stop();
             Console.WriteLine("Elapsed time: " + sw.Elapsed.ToString());
+
+            return customerEvents.AsEnumerable();
         }
 
-        private static void Task2(Customer customer)
+        public static IEnumerable<Event> Task2(Customer customer)
         {
             Stopwatch sw = new Stopwatch();
             sw.Start();
 
             // Parallel may increase performance here, as we depend on GetDistance() response
-            var customerEvents = events.AsParallel()
+            var customerEvents = Events.AsParallel()
                                         .OrderBy(e => GetDistance(customer.City, e.City))
-                                        .Take(10);
-
-            foreach (var e in customerEvents)
-            {
-                AddToEmail(customer, e);
-            }
-
-            sw.Stop();
-            Console.WriteLine("Elapsed time: " + sw.Elapsed.ToString());  
-        }
-
-        private static void Task3(Customer customer)
-        {
-            Stopwatch sw = new Stopwatch();
-            sw.Start();
-
-            // Parallel may increase performance here, as we depend on GetDistance
-            var customerEvents = events.AsParallel()
-                                        .OrderBy(e => GetDistanceOptimized(customer.City, e.City))
-                                        .Take(10);
+                                        .Take(5);
 
             foreach (var e in customerEvents)
             {
@@ -106,17 +84,19 @@ namespace Viagogo
 
             sw.Stop();
             Console.WriteLine("Elapsed time: " + sw.Elapsed.ToString());
+
+            return customerEvents.AsEnumerable();
         }
 
-        private static void Task4(Customer customer)
+        public static IEnumerable<Event> Task3(Customer customer)
         {
             Stopwatch sw = new Stopwatch();
             sw.Start();
 
             // Parallel may increase performance here, as we depend on GetDistance
-            var customerEvents = events.AsParallel()
+            var customerEvents = Events.AsParallel()
                                         .OrderBy(e => GetDistanceOptimized(customer.City, e.City))
-                                        .Take(10);
+                                        .Take(5);
 
             foreach (var e in customerEvents)
             {
@@ -125,44 +105,86 @@ namespace Viagogo
 
             sw.Stop();
             Console.WriteLine("Elapsed time: " + sw.Elapsed.ToString());
+
+            return customerEvents.AsEnumerable();
         }
 
-        private static void Task5(Customer customer)
+        public static IEnumerable<Event> Task4(Customer customer)
+        {
+            Stopwatch sw = new Stopwatch();
+            sw.Start();
+
+            // Parallel may increase performance here, as we depend on GetDistance
+            var customerEvents = Events.AsParallel()
+                                        .OrderBy(e => GetDistanceOptimized(customer.City, e.City))
+                                        .Take(5);
+
+            foreach (var e in customerEvents)
+            {
+                AddToEmail(customer, e);
+            }
+
+            sw.Stop();
+            Console.WriteLine("Elapsed time: " + sw.Elapsed.ToString());
+
+            return customerEvents.AsEnumerable();
+        }
+
+        public static IEnumerable<Event> Task5(Customer customer)
         {
             Stopwatch sw = new Stopwatch();
             sw.Start();
 
             // As Price and Distance can have delays on their response, Parallel should perform better
             // Adding Price to returned object avoid to call the method again in the foreach (makes it o log(n)) in Add email and increase performance
-            var customerEvents = events.AsParallel() 
-                                        .Select(e => new { ev = e, Price = GetPrice(e) })
-                                        .OrderBy(e => GetDistanceOptimized(customer.City, e.ev.City))
+            var customerEvents = Events.AsParallel() 
+                                        .Select(e => new Event { Name = e.Name, City = e.City, Price = GetPrice(e) })
+                                        .OrderBy(e => GetDistanceOptimized(customer.City, e.City))
                                         .ThenBy(e => e.Price)
                                         .Take(10);
 
             foreach (var ce in customerEvents)
             {
-                AddToEmail(customer, ce.ev, ce.Price);
+                AddToEmail(customer, ce, ce.Price);
             }
 
             sw.Stop();
             Console.WriteLine("Elapsed time: " + sw.Elapsed.ToString());
+
+            return customerEvents.AsEnumerable();
         }
 
 
         private static int GetDistanceOptimized(string cityA, string cityB)
         {
-            string key = GetCacheKey(cityA, cityB);
+            // Of course in a real world, these parameters would come from a config file
+            int numberOfRetries = 5;
+            int waitTimeMilliseconds = 1000;
 
-            if (cacheDistances.TryGetValue(key, out int cacheDistance))
-                return cacheDistance;
+            string key = GetCacheKey(cityA, cityB);
+            int distance = -1;
+
+            if (cacheDistances.TryGetValue(key, out distance))
+                return distance;
             else
             {
-                int distance = GetDistance(cityA, cityB);
-                cacheDistances.TryAdd(key, distance);
+                for (int i = 0; i < numberOfRetries; i++)
+                {
+                    try
+                    {
+                        distance = GetDistance(cityA, cityB);
+                        cacheDistances.TryAdd(key, distance);
 
-                return distance;
+                        return distance;
+                    }
+                    catch (Exception)
+                    {
+                        Thread.Sleep(waitTimeMilliseconds);
+                    }
+                }
             }
+
+            throw new Exception($"Unable to get distances after {numberOfRetries} retries");
         }
 
         private static string GetCacheKey(string cityA, string cityB)
