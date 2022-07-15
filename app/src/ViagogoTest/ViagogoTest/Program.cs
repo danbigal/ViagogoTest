@@ -13,6 +13,7 @@ namespace Viagogo
         // I made below "Tasks" methods public and returning the IEnumerable<Events> just to be testable from UnitTests project
         // I also included a stopwatch just to evidence in the Console that Task3 is performing better than Task2 (of course it wouldn't be there in a real world context)
         // I have also changed the methods to be async, so we don't freeze the main thread
+        // There's no method for Task4, because its implementation is the same as Task3, but errors are being handled in Main and retries in GetDistanceOptmized
 
         public static List<Event> Events { get; set; } = new List<Event>{
                                                                             new Event { Name = "Phantom of the Opera", City = "New York" },
@@ -38,7 +39,7 @@ namespace Viagogo
                 Console.WriteLine("***** TASK 1 ****");
                 sw.Start();
 
-                Task1(customer);
+                await Task1Async(customer);
 
                 sw.Stop();
                 Console.WriteLine($"***** ELAPSED TIME: {sw.Elapsed} ****");
@@ -66,18 +67,6 @@ namespace Viagogo
                 Console.WriteLine($"***** ELAPSED TIME: {sw.Elapsed} ****");
                 Console.WriteLine();
 
-
-                Console.WriteLine("***** TASK 4 ****");
-                sw.Reset();
-                sw.Start();
-
-                await Task4Async(customer);
-
-                sw.Stop();
-                Console.WriteLine($"***** ELAPSED TIME: {sw.Elapsed} ****");
-                Console.WriteLine();
-
-
                 Console.WriteLine("***** TASK 5 ****");
                 sw.Reset();
                 sw.Start();
@@ -86,7 +75,7 @@ namespace Viagogo
 
                 sw.Stop();
                 Console.WriteLine($"***** ELAPSED TIME: {sw.Elapsed} ****");
-                Console.WriteLine();
+                Console.WriteLine("Press any key to end...");
 
                 Console.ReadKey();
             }
@@ -97,12 +86,12 @@ namespace Viagogo
             }            
         }
 
-        public static IEnumerable<Event> Task1(Customer customer)
+        public async static Task<IEnumerable<Event>> Task1Async(Customer customer)
         {
             var customerEvents = Events.Where(e => e.City == customer.City);
 
             // Parallel may perform better here, as it's unordered and also has no limits of events
-            Parallel.ForEach(customerEvents, async e =>
+            await Parallel.ForEachAsync(customerEvents, async (e, c) =>
             {
                 await AddToEmailAsync(customer, e);
             });
@@ -126,28 +115,6 @@ namespace Viagogo
         }
 
         public static async Task<IEnumerable<Event>> Task3Async(Customer customer)
-        {
-            // Parallel may increase performance here, as we depend on GetDistance
-            var customerEvents = Events.AsParallel()
-                                        .Select(async e => new CustomerEvent
-                                        {
-                                            Event = new Event { Name = e.Name, City = e.City },
-                                            Customer = customer,
-                                            Distance = await GetDistanceOptimizedAsync(customer.City, e.City)
-                                        })
-                                        .Select(e => e.Result)
-                                        .OrderBy(e => e.Distance)
-                                        .Take(5);
-
-            foreach (var e in customerEvents)
-            {
-                await AddToEmailAsync(customer, e.Event);
-            }
-
-            return customerEvents.Select(e => e.Event).AsEnumerable();
-        }
-
-        public async static Task<IEnumerable<Event>> Task4Async(Customer customer)
         {
             // Parallel may increase performance here, as we depend on GetDistance
             var customerEvents = Events.AsParallel()

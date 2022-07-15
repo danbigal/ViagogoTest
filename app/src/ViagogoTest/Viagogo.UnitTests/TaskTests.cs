@@ -29,7 +29,7 @@ namespace Viagogo.UnitTests
 
             // Act
             var customer = new Customer { Name = "Mr. Fake", City = "New York" };
-            var events = Program.Task1(customer);
+            var events = await Program.Task1Async(customer);
 
             // Assert
 
