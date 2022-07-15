@@ -10,68 +10,108 @@ namespace Viagogo
 {
     public class Program
     {
-        public static List<Event> Events { get; set; }
+        // I made below "Tasks" methods public and returning the IEnumerable<Events> just to be testable from UnitTests project
+        // I also included a stopwatch just to evidence in the Console that Task3 is performing better than Task2 (of course it wouldn't be there in a real world context)
+        // I have also changed the methods to be async, so we don't freeze the main thread
+
+        public static List<Event> Events { get; set; } = new List<Event>{
+                                                                            new Event { Name = "Phantom of the Opera", City = "New York" },
+                                                                            new Event { Name = "Metallica", City = "Los Angeles" },
+                                                                            new Event { Name = "Metallica", City = "New York" },
+                                                                            new Event { Name = "Metallica", City = "Boston" },
+                                                                            new Event { Name = "LadyGaGa", City = "New York" },
+                                                                            new Event { Name = "LadyGaGa", City = "Boston" },
+                                                                            new Event { Name = "LadyGaGa", City = "Chicago" },
+                                                                            new Event { Name = "LadyGaGa", City = "San Francisco" },
+                                                                            new Event { Name = "LadyGaGa", City = "Washington" }
+                                                                        };
 
         private static ConcurrentDictionary<string, int> cacheDistances = new ConcurrentDictionary<string, int>();
 
-        static void Main(string[] args)
+        public static async Task Main(string[] args)
         {
-            Events = new List<Event>{
-                                    new Event { Name = "Phantom of the Opera", City = "New York" },
-                                    new Event { Name = "Metallica", City = "Los Angeles" },
-                                    new Event { Name = "Metallica", City = "New York" },
-                                    new Event { Name = "Metallica", City = "Boston" },
-                                    new Event { Name = "LadyGaGa", City = "New York" },
-                                    new Event { Name = "LadyGaGa", City = "Boston" },
-                                    new Event { Name = "LadyGaGa", City = "Chicago" },
-                                    new Event { Name = "LadyGaGa", City = "San Francisco" },
-                                    new Event { Name = "LadyGaGa", City = "Washington" }
-                                };
-
             var customer = new Customer { Name = "Mr. Fake", City = "New York" };
+            Stopwatch sw = new Stopwatch();
 
-            Console.WriteLine("***** TASK 1 ****");
-            Task1(customer);
+            try
+            {
+                Console.WriteLine("***** TASK 1 ****");
+                sw.Start();
 
-            Console.WriteLine("***** TASK 2 ****");
-            Task2(customer);
+                Task1(customer);
 
-            Console.WriteLine("***** TASK 3 ****");
-            Task3(customer);
+                sw.Stop();
+                Console.WriteLine($"***** ELAPSED TIME: {sw.Elapsed} ****");
+                Console.WriteLine();
 
-            Console.WriteLine("***** TASK 4 ****");
-            Task4(customer);
 
-            Console.WriteLine("***** TASK 5 ****");
-            Task5(customer);
+                Console.WriteLine("***** TASK 2 ****");
+                sw.Reset();
+                sw.Start();
 
-            Console.ReadKey();
+                await Task2Async(customer);
+
+                sw.Stop();
+                Console.WriteLine($"***** ELAPSED TIME: {sw.Elapsed} ****");
+                Console.WriteLine();
+
+
+                Console.WriteLine("***** TASK 3 ****");
+                sw.Reset();
+                sw.Start();
+
+                await Task3Async(customer);
+
+                sw.Stop();
+                Console.WriteLine($"***** ELAPSED TIME: {sw.Elapsed} ****");
+                Console.WriteLine();
+
+
+                Console.WriteLine("***** TASK 4 ****");
+                sw.Reset();
+                sw.Start();
+
+                await Task4Async(customer);
+
+                sw.Stop();
+                Console.WriteLine($"***** ELAPSED TIME: {sw.Elapsed} ****");
+                Console.WriteLine();
+
+
+                Console.WriteLine("***** TASK 5 ****");
+                sw.Reset();
+                sw.Start();
+
+                await Task5Async(customer);
+
+                sw.Stop();
+                Console.WriteLine($"***** ELAPSED TIME: {sw.Elapsed} ****");
+                Console.WriteLine();
+
+                Console.ReadKey();
+            }
+            catch (Exception)
+            {
+                // Log the error
+                Console.WriteLine("An unexpected error happened");
+            }            
         }
 
         public static IEnumerable<Event> Task1(Customer customer)
         {
-            Stopwatch sw = new Stopwatch();
-            sw.Start();
-
             var customerEvents = Events.Where(e => e.City == customer.City);
 
             // Parallel may perform better here, as it's unordered and also has no limits of events
-            Parallel.ForEach(customerEvents, e =>
+            Parallel.ForEach(customerEvents, async e =>
             {
-                AddToEmail(customer, e);
+                await AddToEmailAsync(customer, e);
             });
-
-            sw.Stop();
-            Console.WriteLine("Elapsed time: " + sw.Elapsed.ToString());
 
             return customerEvents.AsEnumerable();
         }
 
-        public static IEnumerable<Event> Task2(Customer customer)
+        public async static Task<IEnumerable<Event>> Task2Async(Customer customer)
         {
-            Stopwatch sw = new Stopwatch();
-            sw.Start();
-
             // Parallel may increase performance here, as we depend on GetDistance() response
             var customerEvents = Events.AsParallel()
                                         .OrderBy(e => GetDistance(customer.City, e.City))
@@ -79,83 +119,81 @@ namespace Viagogo
 
             foreach (var e in customerEvents)
             {
-                AddToEmail(customer, e);
+                await AddToEmailAsync(customer, e);
             }
-
-            sw.Stop();
-            Console.WriteLine("Elapsed time: " + sw.Elapsed.ToString());
 
             return customerEvents.AsEnumerable();
         }
 
-        public static IEnumerable<Event> Task3(Customer customer)
+        public static async Task<IEnumerable<Event>> Task3Async(Customer customer)
         {
-            Stopwatch sw = new Stopwatch();
-            sw.Start();
-
             // Parallel may increase performance here, as we depend on GetDistance
             var customerEvents = Events.AsParallel()
-                                        .OrderBy(e => GetDistanceOptimized(customer.City, e.City))
+                                        .Select(async e => new CustomerEvent
+                                        {
+                                            Event = new Event { Name = e.Name, City = e.City },
+                                            Customer = customer,
+                                            Distance = await GetDistanceOptimizedAsync(customer.City, e.City)
+                                        })
+                                        .Select(e => e.Result)
+                                        .OrderBy(e => e.Distance)
                                         .Take(5);
 
             foreach (var e in customerEvents)
             {
-                AddToEmail(customer, e);
+                await AddToEmailAsync(customer, e.Event);
             }
 
-            sw.Stop();
-            Console.WriteLine("Elapsed time: " + sw.Elapsed.ToString());
-
-            return customerEvents.AsEnumerable();
+            return customerEvents.Select(e => e.Event).AsEnumerable();
         }
 
-        public static IEnumerable<Event> Task4(Customer customer)
+        public async static Task<IEnumerable<Event>> Task4Async(Customer customer)
         {
-            Stopwatch sw = new Stopwatch();
-            sw.Start();
-
             // Parallel may increase performance here, as we depend on GetDistance
             var customerEvents = Events.AsParallel()
-                                        .OrderBy(e => GetDistanceOptimized(customer.City, e.City))
+                                        .Select(async e => new CustomerEvent
+                                        {
+                                            Event = new Event { Name = e.Name, City = e.City },
+                                            Customer = customer,
+                                            Distance = await GetDistanceOptimizedAsync(customer.City, e.City)
+                                        })
+                                        .Select(e => e.Result)
+                                        .OrderBy(e => e.Distance)
                                         .Take(5);
 
             foreach (var e in customerEvents)
             {
-                AddToEmail(customer, e);
+                await AddToEmailAsync(customer, e.Event);
             }
 
-            sw.Stop();
-            Console.WriteLine("Elapsed time: " + sw.Elapsed.ToString());
-
-            return customerEvents.AsEnumerable();
+            return customerEvents.Select(e => e.Event).AsEnumerable();
         }
 
-        public static IEnumerable<Event> Task5(Customer customer)
+        public async static Task<IEnumerable<Event>> Task5Async(Customer customer)
         {
-            Stopwatch sw = new Stopwatch();
-            sw.Start();
-
             // As Price and Distance can have delays on their response, Parallel should perform better
-            // Adding Price to returned object avoid to call the method again in the foreach (makes it o log(n)) in Add email and increase performance
+            // Adding Price to returned object avoid to call the method again in the foreach in Add email and increase performance
             var customerEvents = Events.AsParallel() 
-                                        .Select(e => new Event { Name = e.Name, City = e.City, Price = GetPrice(e) })
-                                        .OrderBy(e => GetDistanceOptimized(customer.City, e.City))
-                                        .ThenBy(e => e.Price)
-                                        .Take(10);
+                                        .Select(async e => new CustomerEvent
+                                        {
+                                            Event = new Event { Name = e.Name, City = e.City, Price = await GetPriceAsync(e) },
+                                            Customer = customer,
+                                            Distance = await GetDistanceOptimizedAsync(customer.City, e.City)
+                                        })
+                                        .Select(e => e.Result)
+                                        .OrderBy(e => e.Distance)
+                                        .ThenBy(e => e.Event.Price)
+                                        .Take(5);
 
             foreach (var ce in customerEvents)
             {
-                AddToEmail(customer, ce, ce.Price);
+                await AddToEmailAsync(customer, ce.Event);
             }
 
-            sw.Stop();
-            Console.WriteLine("Elapsed time: " + sw.Elapsed.ToString());
-
-            return customerEvents.AsEnumerable();
+            return customerEvents.Select(e => e.Event).AsEnumerable();
         }
 
-
-        private static int GetDistanceOptimized(string cityA, string cityB)
+        private static async Task<int> GetDistanceOptimizedAsync(string cityA, string cityB)
         {
             // Of course in a real world, these parameters would come from a config file
             int numberOfRetries = 5;
@@ -172,12 +210,16 @@ namespace Viagogo
                 {
                     try
                     {
-                        distance = GetDistance(cityA, cityB);
+                        await Task.Run(() =>
+                        {
+                            distance = GetDistance(cityA, cityB);
+                        });
+
                         cacheDistances.TryAdd(key, distance);
 
                         return distance;
                     }
-                    catch (Exception)
+                    catch (TimeoutException)
                     {
                         Thread.Sleep(waitTimeMilliseconds);
                     }
@@ -185,6 +227,18 @@ namespace Viagogo
             }
 
             throw new Exception($"Unable to get distances after {numberOfRetries} retries");
+        }
+
+        static async Task<int> GetPriceAsync(Event e)
+        {
+            int price = 0;
+
+            await Task.Run(() =>
+            {
+                price = GetPrice(e);
+            });
+
+            return price;
         }
 
         private static string GetCacheKey(string cityA, string cityB)
@@ -198,31 +252,36 @@ namespace Viagogo
                 return cityB + "_" + cityA;
         }
 
+        private static async Task AddToEmailAsync(Customer c, Event e)
+        {
+            var distance = await GetDistanceOptimizedAsync(c.City, e.City);
+            Console.Out.WriteLine($"{c.Name}: {e.Name} in {e.City}"
+            + (distance > 0 ? $" ({distance} miles away)" : "")
+            + (e.Price.HasValue ? $" for ${e.Price}" : ""));
+        }
 
         #region "Codebase Methods"
         static void AddToEmail(Customer c, Event e, int? price = null)
         {
-            // Changing GetDistance to optmized version using cache 
-
-            var distance = GetDistanceOptimized(c.City, e.City);
+            var distance = GetDistance(c.City, e.City);
             Console.Out.WriteLine($"{c.Name}: {e.Name} in {e.City}"
             + (distance > 0 ? $" ({distance} miles away)" : "")
             + (price.HasValue ? $" for ${price}" : ""));
         }
 
+        // Adding delay to responses to make it realistic
         static int GetPrice(Event e)
         {
-            // Adding delay in some responses
             Thread.Sleep(100);
 
             return (AlphebiticalDistance(e.City, "") + AlphebiticalDistance(e.Name, "")) / 10;
         }
 
+        // Adding delay to responses to make it realistic
         static int GetDistance(string fromCity, string toCity)
         {
-            // Adding delay in some responses
             Thread.Sleep(100);
-
+            
             return AlphebiticalDistance(fromCity, toCity);
         }
 

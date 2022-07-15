@@ -6,8 +6,4 @@
     <RootNamespace>Viagogo</RootNamespace>
   </PropertyGroup>
 
-  <ItemGroup>
-    <None Remove="DistanceKey.cs~RF74af37.TMP" />
-  </ItemGroup>
-
 </Project>
