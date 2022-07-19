@@ -9,6 +9,7 @@ namespace Viagogo
     public class EventEnhanced : Event
     {
         public int Distance { get; set; }
-        public int? Price { get; set; }
+        public int Price { get; set; }
+        public DateTime Date { get; set; }
     }
 }

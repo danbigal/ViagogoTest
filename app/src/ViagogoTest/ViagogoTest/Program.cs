@@ -29,7 +29,7 @@ namespace Viagogo
 
         private static ConcurrentDictionary<string, int> cacheDistances = new ConcurrentDictionary<string, int>();
 
-        public static void Main(string[] args)
+        public static async Task Main(string[] args)
         {
             var customer = new Customer { Name = "Mr. Fake", City = "New York" };
             Stopwatch sw = new Stopwatch();
@@ -61,7 +61,7 @@ namespace Viagogo
                 sw.Reset();
                 sw.Start();
 
-                Task3(customer);
+                await Task3(customer);
 
                 sw.Stop();
                 Console.WriteLine($"***** ELAPSED TIME: {sw.Elapsed} ****");
@@ -71,16 +71,17 @@ namespace Viagogo
                 sw.Reset();
                 sw.Start();
 
-                Task5(customer);
+                await Task5(customer);
 
                 sw.Stop();
                 Console.WriteLine($"***** ELAPSED TIME: {sw.Elapsed} ****");
 
                 Console.WriteLine("***** TASK 6 ****");
+                Console.WriteLine();
                 sw.Reset();
                 sw.Start();
 
-                Task6(customer);
+                await Task6(customer);
 
                 sw.Stop();
                 Console.WriteLine($"***** ELAPSED TIME: {sw.Elapsed} ****");
@@ -117,6 +118,7 @@ namespace Viagogo
                                         .OrderBy(e => GetDistance(customer.City, e.City))
                                         .Take(5);
 
+            // Removing parallel foreach because it's ordered and it has just 5 limited items
             foreach (var e in customerEvents)
             {
                 AddToEmail(customer, e);
@@ -125,21 +127,23 @@ namespace Viagogo
             return customerEvents;
         }
 
-        public static IEnumerable<Event> Task3(Customer customer)
+        public static async Task<IEnumerable<Event>> Task3(Customer customer)
         {
             // Parallel may increase performance here, as we depend on GetDistance
-            var customerEvents = Events.AsParallel()
-                                        .Select(async e => new EventEnhanced
-                                        {
-                                            Name = e.Name, 
-                                            City = e.City,
-                                            Distance = await GetDistanceOptimizedAsync(customer.City, e.City)
-                                        })
-                                        .Select(e => e.Result)
-                                        .OrderBy(e => e.Distance)
-                                        //It fails: async awaitn not permitted in OrderBy
-                                        //.OrderBy(async e => await GetDistanceOptimizedAsync(customer.City, e.City)
-                                        .Take(5);
+            var enhancedEvents = await Task.WhenAll(Events.AsParallel().Select(async e =>
+                                                                        {
+                                                                            return new EventEnhanced
+                                                                            {
+                                                                                Name = e.Name,
+                                                                                City = e.City,
+                                                                                Distance = await GetDistanceOptimizedAsync(customer.City, e.City),
+                                                                            };
+                                                                        }));
+
+            var customerEvents = enhancedEvents.OrderBy(e => e.Distance)
+                                                //It fails: async await not permitted in OrderBy
+                                                //.OrderBy(async e => await GetDistanceOptimizedAsync(customer.City, e.City)
+                                                .Take(5);
 
             foreach (var e in customerEvents)
             {
@@ -149,67 +153,55 @@ namespace Viagogo
             return customerEvents;
         }
 
-        public static IEnumerable<EventEnhanced> Task5(Customer customer)
+        public static async Task<IEnumerable<EventEnhanced>> Task5(Customer customer)
         {
             // As Price and Distance can have delays on their response, Parallel should perform better
             // Adding Price to returned object avoid to call the method again in the foreach in Add email and increase performance
-            var customEvents = Events.AsParallel()
-                                        .Select(async e => new EventEnhanced
-                                        {
-                                            Name = e.Name,
-                                            City = e.City,
-                                            Distance = await GetDistanceOptimizedAsync(customer.City, e.City),
-                                            Price = await GetPriceAsync(e),
-                                        })
-                                        .Select(e => e.Result)
-                                        .OrderBy(e => e.Distance)
-                                        .ThenBy(e => e.Price)
-                                        .Take(5);
+            var enhancedEvents = await Task.WhenAll(Events.AsParallel().Select(async e => await EnhanceEventAsync(e, customer)));
 
-            foreach (var ce in customEvents)
+            var customerEvents= enhancedEvents.OrderBy(e => e.Distance)
+                                                .ThenBy(e => e.Price)
+                                                .Take(5);
+
+            foreach (var ce in customerEvents)
             {
                 AddToEmailOptmized(customer, ce);
             }
 
-            return customEvents;
+            return customerEvents;
         }
 
         // What's the maximum difference days we will consider?
-        // Should we return only the eventos closer to the birthday?? or if there's no event near, we should complete the TOP5?
+        // Should we return only the events closer to the birthday?? or if there's no event near, we should complete the TOP5?
         //      Ex: if there are only 2 events close to the birthday, should we return only these 2, or should wee return these 2 first and then the closer ones until complete the TOP5?
         // Should we keep ordering by distance, price and taking only the TOP5?
-        public static IEnumerable<EventEnhanced> Task6 (Customer customer)
+        public static async Task<IEnumerable<EventEnhanced>> Task6 (Customer customer)
         {
+            var customerBirthday = GetBirthdayDate(customer);
+
             // As Price and Distance can have delays on their response, Parallel should perform better
             // Adding Price to returned object avoid to call the method again in the foreach in Add email and increase performance
-            var customerEvents = Events.AsParallel()
-                                        .Select(async e => new EventEnhanced
-                                        {
-                                            Name = e.Name,
-                                            City = e.City,
-                                            Distance = await GetDistanceOptimizedAsync(customer.City, e.City),
-                                            Price = await GetPriceAsync(e),
-                                        })
-                                        .Select(e => e.Result)
-                                        .Where(e =>
-                                        {
-                                            int maxDiffAllowed = 10;
+            var enhancedEvents = await Task.WhenAll(Events.AsParallel().Select(async e => await EnhanceEventAsync(e, customer)));
 
-                                            var eventDate = GetEventDate(e);
-                                            var customerBirthday = GetBirthdayDate(customer);
+            var customerEvents = enhancedEvents.Where(e =>
+                                                {
+                                                    int maxDiffAllowed = 10;
 
-                                            int daysDiff = Math.Abs((eventDate - new DateTime(eventDate.Year, customerBirthday.Month, customerBirthday.Day)).Days);
-                                            daysDiff = Math.Min(daysDiff, Math.Abs((eventDate - new DateTime(eventDate.Year + 1, customerBirthday.Month, customerBirthday.Day)).Days));
-                                            daysDiff = Math.Min(daysDiff, Math.Abs((eventDate - new DateTime(eventDate.Year -1 , customerBirthday.Month, customerBirthday.Day)).Days));
+                                                    // We can make it async, and add it inside EnhaceEventAsync() method
+                                                    var eventDate = GetEventDate(e);
 
-                                            return daysDiff <= maxDiffAllowed;
+                                                    int daysDiff = Math.Abs((eventDate - new DateTime(eventDate.Year, customerBirthday.Month, customerBirthday.Day)).Days);
+                                                    daysDiff = Math.Min(daysDiff, Math.Abs((eventDate - new DateTime(eventDate.Year + 1, customerBirthday.Month, customerBirthday.Day)).Days));
+                                                    daysDiff = Math.Min(daysDiff, Math.Abs((eventDate - new DateTime(eventDate.Year -1 , customerBirthday.Month, customerBirthday.Day)).Days));
 
-                                            // In case of OrderBy
-                                            //return daysDiff;
-                                        })
-                                        .OrderBy(e => e.Distance)
-                                        .ThenBy(e => e.Price)
-                                        .Take(5);
+                                                    return daysDiff <= maxDiffAllowed;
+
+                                                    // In case of OrderBy
+                                                    //return daysDiff;
+                                                })
+                                                .OrderBy(e => e.Distance)
+                                                .ThenBy(e => e.Price)
+                                                .Take(5);
 
             foreach (var e in customerEvents)
             {
@@ -217,16 +209,6 @@ namespace Viagogo
             }
 
             return customerEvents;
-        }
-
-        private static DateTime GetBirthdayDate(Customer customer)
-        {
-            return new DateTime(1990, 01, 01);
-        }
-
-        private static DateTime GetEventDate(Event e)
-        {
-            return new DateTime(2022, 12, 29);
         }
 
         // Optmizing GetDistance to Get cache from Dictionary
@@ -238,6 +220,9 @@ namespace Viagogo
             //int numberOfRetries = 5;
             //int waitTimeMilliseconds = 1000;
 
+
+            // Are distances between 2 cities will be the same both sides trip?
+            // I mean: New_York > Chicago can be considered same as Chicago > New York
             string key = cityA + "_" + cityB; //GetCacheKey(cityA, cityB);
 
             if (cacheDistances.TryGetValue(key, out int cacheDistance))
@@ -250,10 +235,7 @@ namespace Viagogo
                 //{
                 try
                     {
-                        distance = await Task.Run(() =>
-                                    {
-                                        return GetDistance(cityA, cityB);
-                                    });
+                        distance = await Task.Run(() => GetDistance(cityA, cityB));
 
                         cacheDistances.TryAdd(key, distance);
 
@@ -274,21 +256,25 @@ namespace Viagogo
             // throw new Exception($"Unable to get distances after {numberOfRetries} retries");
         }
 
+        private static async Task<EventEnhanced> EnhanceEventAsync(Event e, Customer c)
+        {
+            return new EventEnhanced
+            {
+                Name = e.Name,
+                City = e.City,
+                Distance = await GetDistanceOptimizedAsync(c.City, e.City),
+                Price = await GetPriceAsync(e),
+                Date = GetEventDate(e)
+            };
+        
+        }
+
         // As price can be slow, I would change it to async
         static async Task<int> GetPriceAsync(Event e)
         {
-            int price = 0;
-
-            await Task.Run(() =>
-            {
-                price = GetPrice(e);
-            });
-
-            return price;
+            return await Task.Run(() => GetPrice(e));
         }
 
-        // Are distances between 2 cities will be the same both sides trip?
-        // I mean: New_York > Chicago can be considered same as Chicago > New York
         private static string GetCacheKey(string cityA, string cityB)
         {
             // Generating a key by putting cities in alphabetical order gurantee we don't have two keys for the same distance
@@ -304,7 +290,7 @@ namespace Viagogo
         {
             Console.Out.WriteLine($"{c.Name}: {e.Name} in {e.City}"
             + (e.Distance > 0 ? $" ({e.Distance} miles away)" : "")
-            + (e.Price.HasValue ? $" for ${e.Price}" : ""));
+            + (e.Price > 0 ? $" for ${e.Price}" : ""));
         }
 
         #region "Codebase Methods"
@@ -330,6 +316,16 @@ namespace Viagogo
             Thread.Sleep(100);
             
             return AlphebiticalDistance(fromCity, toCity);
+        }
+
+        private static DateTime GetBirthdayDate(Customer customer)
+        {
+            return new DateTime(1990, 01, 01);
+        }
+
+        private static DateTime GetEventDate(Event e)
+        {
+            return new DateTime(2022, 12, 29);
         }
 
         private static int AlphebiticalDistance(string s, string t)
