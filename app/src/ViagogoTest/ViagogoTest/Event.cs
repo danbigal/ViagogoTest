@@ -10,6 +10,5 @@ namespace Viagogo
     {
         public string Name { get; set; }
         public string City { get; set; }
-        public int? Price{ get; set; }
     }
 }

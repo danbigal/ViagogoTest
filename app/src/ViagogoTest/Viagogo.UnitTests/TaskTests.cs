@@ -10,7 +10,7 @@ namespace Viagogo.UnitTests
     public class TaskTests
     {
         [Fact]
-        public async Task Task1_Success_AllEventsInCustomerCity()
+        public void Task1_Success_AllEventsInCustomerCity()
         {
             // Arrange
             Program.Events = new List<Event>
@@ -29,7 +29,7 @@ namespace Viagogo.UnitTests
 
             // Act
             var customer = new Customer { Name = "Mr. Fake", City = "New York" };
-            var events = await Program.Task1Async(customer);
+            var events = Program.Task1(customer);
 
             // Assert
 
@@ -40,7 +40,7 @@ namespace Viagogo.UnitTests
         }
 
         [Fact]
-        public async Task Task2_Success_Top5NearbyEvents()
+        public void Task2_Success_Top5NearbyEvents()
         {
             // Arrange
             Program.Events = new List<Event>
@@ -59,7 +59,7 @@ namespace Viagogo.UnitTests
 
             // Act
             var customer = new Customer { Name = "Mr. Fake", City = "New York" };
-            var events = await Program.Task2Async(customer);
+            var events = Program.Task2(customer);
 
             // Assert
             Assert.Collection<Event>(events,
@@ -78,7 +78,7 @@ namespace Viagogo.UnitTests
         }
 
         [Fact]
-        public async Task Task3_Success_Top5NearbyEventsOptmized()
+        public void Task3_Success_Top5NearbyEventsOptmized()
         {
             // Arrange
             Program.Events = new List<Event>
@@ -101,7 +101,7 @@ namespace Viagogo.UnitTests
             Stopwatch sw = new Stopwatch();
             sw.Start();
 
-            var events = await Program.Task2Async(customer);
+            var events = Program.Task2(customer);
 
             sw.Stop();
             long elapsedTimeTask2 = sw.ElapsedMilliseconds;
@@ -109,7 +109,7 @@ namespace Viagogo.UnitTests
             sw.Reset();
             sw.Start();
 
-            events = await Program.Task3Async(customer);
+            events = Program.Task3(customer);
 
             sw.Stop();
             long elapsedTimeTask3 = sw.ElapsedMilliseconds;
@@ -133,17 +133,27 @@ namespace Viagogo.UnitTests
         }
 
         [Fact]
-        public async Task Task4_Main_ShouldNotFail_WhenTaskFails()
+        public void Task4_Main_Task3ShouldNotFail_WhenDistanceError()
         {
             // Arrange
-            Program.Events = new List<Event> { new Event { Name = "Phantom of the Opera", City = null } };
+            Program.Events = new List<Event> { 
+                                                new Event { Name = "Iron Maiden", City = null }, 
+                                                new Event { Name = "Metallica", City = "New York" } 
+                                            };
+
+            var customer = new Customer { Name = "Mr. Fake", City = "New York" };
 
             // Act
-            await Program.Main(new string[] { });
+            var events = Program.Task3(customer);
+
+            // Assert
+            Assert.Collection<Event>(events,
+                e => Assert.Equal("Metallica", e.Name),
+                e => Assert.Equal("Iron Maiden", e.Name));
         }
 
         [Fact]
-        public async Task Task5_Success_Top5NearbyEventsOptimizedOrderedByPrice()
+        public void Task5_Success_Top5NearbyEventsOptimizedOrderedByPrice()
         {
             Program.Events = new List<Event>
                                 {
@@ -160,24 +170,24 @@ namespace Viagogo.UnitTests
 
             // Act
             var customer = new Customer { Name = "Mr. Fake", City = "New York" };
-            var events = await Program.Task5Async(customer);
+            var events = Program.Task5(customer);
 
             // Assert
-            Assert.Collection<Event>(events,
+            Assert.Collection<EventEnhanced>(events,
                 e => Assert.Equal("LadyGaGa", e.Name),
                 e => Assert.Equal("Metallica", e.Name),
                 e => Assert.Equal("Phantom of the Opera", e.Name),
                 e => Assert.Equal("LadyGaGa", e.Name),
                 e => Assert.Equal("LadyGaGa", e.Name));
 
-            Assert.Collection<Event>(events,
+            Assert.Collection<EventEnhanced>(events,
                 e => Assert.Equal("New York", e.City),
                 e => Assert.Equal("New York", e.City),
                 e => Assert.Equal("New York", e.City),
                 e => Assert.Equal("Chicago", e.City),
                 e => Assert.Equal("Washington", e.City));
 
-            Assert.Collection<Event>(events,
+            Assert.Collection<EventEnhanced>(events,
                 e => Assert.Equal(148, e.Price),
                 e => Assert.Equal(165, e.Price),
                 e => Assert.Equal(261, e.Price),

@@ -6,10 +6,9 @@ using System.Threading.Tasks;
 
 namespace Viagogo
 {
-    public class CustomerEvent
+    public class EventEnhanced : Event
     {
-        public Customer Customer{ get; set; }
-        public Event Event { get; set; }
         public int Distance { get; set; }
+        public int? Price { get; set; }
     }
 }
