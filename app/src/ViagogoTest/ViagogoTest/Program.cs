@@ -115,6 +115,7 @@ namespace Viagogo
         {
             // Parallel may increase performance here, as we depend on GetDistance() response
             var customerEvents = Events.AsParallel()
+                                        // Does the order of the parameters matter here?
                                         .OrderBy(e => GetDistance(customer.City, e.City))
                                         .Take(5);
 
@@ -236,10 +237,8 @@ namespace Viagogo
                 try
                     {
                         distance = await Task.Run(() => GetDistance(cityA, cityB));
-
                         cacheDistances.TryAdd(key, distance);
-
-                        return distance;
+                        //break;
                     }
                     catch (Exception ex)
                     {
